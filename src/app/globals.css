@@ -1,26 +1,145 @@
 @import "tailwindcss";
 
+/*
+ * Tokens ported from joyco.studio (src/app/globals.css). The site is light:
+ * #F0F0F0 paper, black ink, one chromatic colour (#0000FF). The terminal
+ * runs on the inverted surface the site already uses for `box-cover` and
+ * `tape`: foreground as screen, background as ink. Primary stays primary.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: oklch(0.9551 0 0); /* #F0F0F0 */
+  --foreground: oklch(0 0 0); /* #000000 */
+  --primary: oklch(0.452 0.313 264.052); /* #0000FF */
+  --primary-foreground: oklch(0.9911 0 0); /* #fcfcfc */
+  --secondary: oklch(0.885 0 0); /* #DBDBDB */
+  --accent: oklch(0.8297 0 0); /* #c7c7c7 */
+  --muted-foreground: oklch(0 0 0 / 45%);
+  --border: oklch(0 0 0 / 0.05);
+
+  /* Terminal surface: the site's inverted block. */
+  --screen: var(--foreground);
+  --ink: var(--background);
+  --ink-muted: oklch(0.9551 0 0 / 0.5);
+  --screen-border: oklch(1 0 0 / 0.12);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-screen: var(--screen);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-screen-border: var(--screen-border);
+
+  --font-sans: var(--font-public-sans);
+  --font-mono: var(--font-roboto-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* joyco: uppercase mono is the label voice. 13/16, tracked, semibold. */
+@utility text-caption-mono {
+  font-family: var(--font-mono);
+  font-size: calc(13 / 16 * 1em);
+  letter-spacing: 0.06em;
+  line-height: calc(16 / 13);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* joyco: body mono, 16/24, medium. The terminal's reading size. */
+@utility text-blog-mono {
+  font-family: var(--font-mono);
+  font-size: 1em;
+  letter-spacing: 0.06em;
+  line-height: calc(24 / 16);
+  font-weight: 500;
+}
+
+/* joyco: rules, not whitespace. One hairline per line-height. */
+@utility lined-bg {
+  --lined-bg-color: var(--color-screen-border);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(1lh - 1px),
+    var(--lined-bg-color) calc(1lh - 1px),
+    var(--lined-bg-color) 1lh
+  );
+}
+
+/* joyco: diagonal hatching in structural voids. */
+@utility diagonal-bg {
+  --diagonal-bg-ink: oklch(1 0 0 / 0.08);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 15px,
+    var(--diagonal-bg-ink) 15px,
+    var(--diagonal-bg-ink) 16px
+  );
+}
+
+@layer base {
+  * {
+    border-color: var(--color-screen-border);
+  }
+
+  /* joyco's public focus treatment: square 2px primary outline, 2px offset. */
+  :where(a[href], button, input:not([type="hidden"]), [tabindex]):focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  *::selection {
+    background-color: var(--color-primary);
+    color: var(--color-primary-foreground);
+  }
+
+  html,
+  body {
+    background: var(--screen);
+    color: var(--ink);
+    color-scheme: dark;
+    overscroll-behavior: none;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Block caret, drawn as the input's own caret so the platform owns it. */
+.terminal-input {
+  caret-color: var(--primary);
+  caret-shape: block;
+}
+
+/* Hollow-square cursor echo next to the prompt; still a plain blink. */
+.terminal-caret {
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-caret {
+    animation: none;
+  }
+}
+
+/*
+ * Box-drawing glyphs are missing from Roboto Mono, so the logo uses the
+ * platform mono that ships them. Tracking and leading reset to keep the
+ * grid of cells square.
+ */
+.ascii-art {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  line-height: 1;
 }
