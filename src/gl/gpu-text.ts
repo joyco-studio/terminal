@@ -5,17 +5,45 @@ import { collectBoxRuns } from "@/gl/box-runs";
 import { parseCssColor } from "@/gl/css-color";
 import { FONT_SOURCES } from "@/gl/font-metrics";
 import { INITIAL_BOOT_PROGRESS, type BootProgress, type RenderBackend } from "@/gl/boot-progress";
+import type { GlitchRect } from "@/gl/crt";
 import { createStage } from "@/gl/stage";
+import {
+  REDUCED_MOTION_QUERY,
+  WINDOW_OPEN_MS,
+  prefersReducedMotion,
+} from "@/terminal/window-motion";
 import { createTextLayer } from "@/gl/text-layer";
 import { collectTextRuns } from "@/gl/text-runs";
 
 const ASCII_SELECTOR = "[data-gl-ascii]";
+/** Element whose `data-gl-window` value changes when a window opens or swaps content. */
+const WINDOW_SELECTOR = "[data-gl-window]";
+const NO_REGION = { left: 0, top: 0, right: 0, bottom: 0 } as const;
+/** The logo glitches on its own now and then: a short burst at random gaps. */
+const LOGO_GLITCH = { minGapMs: 4000, maxGapMs: 9000, durationMs: 280 } as const;
+
+function randomGap(): number {
+  return LOGO_GLITCH.minGapMs + Math.random() * (LOGO_GLITCH.maxGapMs - LOGO_GLITCH.minGapMs);
+}
+
+/** 0 → peak → 0 over t in [0, 1]; 0 outside it. */
+function burstEnvelope(t: number): number {
+  return t >= 0 && t <= 1 ? Math.sin(Math.PI * t) : 0;
+}
+
+function toViewportFractions(rect: DOMRect): GlitchRect {
+  return {
+    left: rect.left / window.innerWidth,
+    top: rect.top / window.innerHeight,
+    right: rect.right / window.innerWidth,
+    bottom: rect.bottom / window.innerHeight,
+  };
+}
 /** The tube's power-on; content effects start as the picture opens. */
 const POWER_ON_MS = 1400;
 const CONTENT_REVEAL_DELAY_MS = 450;
 /** DOM events that change what is painted without a mutation: typing, caret, focus. */
 const RESYNC_EVENTS = ["input", "keyup", "focusin", "focusout"] as const;
-const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 /** Paint order: boxes under glyphs, like the DOM's backgrounds under text. */
 const RENDER_ORDER = { boxes: 0, glyphs: 1 } as const;
 
@@ -24,9 +52,6 @@ export interface GpuTextSession {
   dispose(): void;
 }
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
-}
 
 function measureAscii(pre: HTMLElement): AsciiPlacement | null {
   const textNode = pre.firstChild;
@@ -49,11 +74,19 @@ function measureAscii(pre: HTMLElement): AsciiPlacement | null {
   };
 }
 
-function syncLogo(logo: AsciiLogo, pre: HTMLElement): void {
+/** Places the logo and returns its drawn area as viewport fractions. */
+function syncLogo(logo: AsciiLogo, pre: HTMLElement): GlitchRect {
   const placement = measureAscii(pre);
-  if (!placement) return;
+  if (!placement) return NO_REGION;
   logo.place(placement);
   logo.setColor(parseCssColor(getComputedStyle(pre).color));
+
+  // the art's own cells, not the <pre>, which stretches to the column width
+  const left = placement.x - window.scrollX;
+  const top = placement.y - window.scrollY;
+  return toViewportFractions(
+    new DOMRect(left, top, logo.columns * placement.cellWidth, logo.rows * placement.cellHeight),
+  );
 }
 
 /**
@@ -109,10 +142,39 @@ export async function startGpuText(
     stage.content.add(logo.mesh);
   }
 
+  // window glitch: restarts whenever the window appears or shows a new command
+  let windowKey: string | null = null;
+  let windowGlitchStart = Number.NEGATIVE_INFINITY;
+  let windowRect: GlitchRect = NO_REGION;
+  const trackWindow = () => {
+    const element = root.querySelector<HTMLElement>(WINDOW_SELECTOR);
+    const key = element?.dataset.glWindow ?? null;
+    if (key && key !== windowKey) windowGlitchStart = performance.now();
+    windowKey = key;
+    if (!element) {
+      windowRect = NO_REGION;
+      return;
+    }
+    windowRect = toViewportFractions(element.getBoundingClientRect());
+  };
+
+  /** Glitch damage for an opening window: full at open, decaying to zero. */
+  const windowGlitch = (now: number): number => {
+    if (prefersReducedMotion()) return 0;
+    const progress = (now - windowGlitchStart) / WINDOW_OPEN_MS;
+    return Math.max(0, 1 - progress) ** 2;
+  };
+
+  // logo glitch: a short burst every few seconds, at random
+  let logoRect: GlitchRect = NO_REGION;
+  let logoBurstStart = Number.NEGATIVE_INFINITY;
+  let nextLogoBurst = performance.now() + randomGap();
+
   const sync = () => {
+    trackWindow();
     boxes.sync(collectBoxRuns(root));
     textLayer.sync(collectTextRuns(root), performance.now());
-    if (logo && asciiSource) syncLogo(logo, asciiSource);
+    if (logo && asciiSource) logoRect = syncLogo(logo, asciiSource);
   };
 
   let pendingFrame = 0;
@@ -159,6 +221,13 @@ export async function startGpuText(
     textLayer.update(now);
     const power = prefersReducedMotion() ? 1 : (now - powerOnStart) / POWER_ON_MS;
     stage.setPower(Math.min(1, power));
+    stage.setRegionGlitch("window", windowRect, windowGlitch(now));
+    if (now >= nextLogoBurst) {
+      logoBurstStart = now;
+      nextLogoBurst = now + randomGap();
+    }
+    const logoDamage = prefersReducedMotion() ? 0 : burstEnvelope((now - logoBurstStart) / LOGO_GLITCH.durationMs);
+    stage.setRegionGlitch("logo", logoRect, logoDamage);
   });
 
   return {

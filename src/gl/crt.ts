@@ -1,4 +1,4 @@
-import { RenderPipeline } from "three/webgpu";
+import { RenderPipeline, Vector4 } from "three/webgpu";
 import type { Camera, Node, Scene, WebGPURenderer } from "three/webgpu";
 import {
   Fn,
@@ -119,17 +119,36 @@ const FLICKER_HZ = 57;
 /** Large enough that consecutive frames reseed every pixel. */
 const GRAIN_TIME_SEED = 7919;
 
+/** Screen areas that can glitch on their own: an opening window, the logo. */
+export type GlitchRegion = "window" | "logo";
+
+export interface GlitchRect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
 export interface CrtPipeline {
   render(): void;
   setMotion(enabled: boolean): void;
   /** 0 = tube off (black), 1 = picture settled. Drive it to play the power-on. */
   setPower(value: number): void;
+  /** Glitches a region's viewport rect (0..1 fractions) at `amount` 0..1. */
+  setRegionGlitch(region: GlitchRegion, rect: GlitchRect, amount: number): void;
   dispose(): void;
 }
+
+function createRegionUniforms() {
+  return { rect: uniform(new Vector4(0, 0, 0, 0)), amount: uniform(0) };
+}
+
+type RegionUniforms = ReturnType<typeof createRegionUniforms>;
 
 export function createCrtPipeline(renderer: WebGPURenderer, scene: Scene, camera: Camera): CrtPipeline {
   const motion = uniform(1);
   const power = uniform(0);
+  const regions = { window: createRegionUniforms(), logo: createRegionUniforms() };
   const sceneColor = pass(scene, camera).getTextureNode("output");
 
   /** Convex tube: pushes the centre out, edges stay pinned to the frame. */
@@ -164,17 +183,34 @@ export function createCrtPipeline(renderer: WebGPURenderer, scene: Scene, camera
       .sub(0.5)
       .mul(POWER_ON.jitter)
       .mul(unlocked);
-    // glitch: while unlocked, random horizontal bands tear sideways with a
+    // regions (an opening window, the logo) can glitch on their own, inside their rect only
+    const damageIn = ({ rect, amount }: RegionUniforms) =>
+      step(rect.x, coord.x)
+        .mul(step(coord.x, rect.z))
+        .mul(step(rect.y, coord.y))
+        .mul(step(coord.y, rect.w))
+        .mul(amount);
+    const windowDamage = damageIn(regions.window);
+    const regionDamage = max(windowDamage, damageIn(regions.logo));
+    // tearing and jitter only move what is drawn, so every region gets them;
+    // static and dropouts paint the whole rect, so the logo is spared those
+    const damage = max(unlocked, regionDamage);
+    const noiseDamage = max(unlocked, windowDamage);
+    // glitch: while damaged, random horizontal bands tear sideways with a
     // colour split, re-rolled several times a second and thinning out
     const glitchFrame = floor(time.mul(GLITCH.fps));
     const band = floor(coord.y.mul(GLITCH.bands));
-    const isTorn = step(float(1).sub(unlocked.mul(GLITCH.tornShare)), hash(band.add(glitchFrame.mul(31.7))));
+    const isTorn = step(float(1).sub(damage.mul(GLITCH.tornShare)), hash(band.add(glitchFrame.mul(31.7))));
     const tear = hash(band.mul(7.13).add(glitchFrame)).sub(0.5).mul(GLITCH.tearReach).mul(isTorn);
-    const base = vec2(coord.x.add(jitter).add(tear), coord.y);
+    const regionJitter = hash(scanRow.add(floor(time.mul(POWER_ON.jitterHz))).add(3.7))
+      .sub(0.5)
+      .mul(POWER_ON.jitter)
+      .mul(regionDamage);
+    const base = vec2(coord.x.add(jitter).add(regionJitter).add(tear), coord.y);
 
     const spread = fromCenter
       .mul(SETTINGS.aberration)
-      .add(vec2(isTorn.mul(unlocked).mul(GLITCH.split), 0));
+      .add(vec2(isTorn.mul(damage).mul(GLITCH.split), 0));
     const tap = (offset: Vec2Node) => {
       const at = base.add(offset);
       return vec3(sceneColor.sample(at.add(spread)).r, sceneColor.sample(at).g, sceneColor.sample(at.sub(spread)).b);
@@ -198,11 +234,11 @@ export function createCrtPipeline(renderer: WebGPURenderer, scene: Scene, camera
       .mul(POWER_ON.glow);
 
     // signal dropouts: whole frames sag, and static bursts over the picture
-    const dropout = step(float(1).sub(unlocked.mul(GLITCH.dropoutShare)), hash(glitchFrame.mul(13.31)));
+    const dropout = step(float(1).sub(noiseDamage.mul(GLITCH.dropoutShare)), hash(glitchFrame.mul(13.31)));
     const sag = mix(float(1), float(GLITCH.dropoutLevel), dropout);
     const pixel = screenCoordinate.x.add(screenCoordinate.y.mul(screenSize.x));
     // squared so the snow clears well before the tearing does
-    const staticBurst = hash(pixel.add(glitchFrame.mul(GRAIN_TIME_SEED))).mul(unlocked.pow(2)).mul(GLITCH.static);
+    const staticBurst = hash(pixel.add(glitchFrame.mul(GRAIN_TIME_SEED))).mul(noiseDamage.pow(2)).mul(GLITCH.static);
 
     // the curtain: lit area grows from the centre line
     const lineWidth = max(smoothstep(0, CURTAIN.lineEnd, power), CURTAIN.minBeam);
@@ -220,7 +256,12 @@ export function createCrtPipeline(renderer: WebGPURenderer, scene: Scene, camera
       .mul(opening.mul(float(1).sub(opening)).mul(4))
       .mul(litX);
 
-    const picture = color.mul(warm).mul(sag).mul(overshoot.add(1)).add(chargeGlow).add(staticBurst);
+    const picture = color
+      .mul(warm)
+      .mul(sag)
+      .mul(overshoot.add(1))
+      .add(chargeGlow)
+      .add(staticBurst);
     color.assign(
       picture
         .mul(litX.mul(litY))
@@ -269,6 +310,10 @@ export function createCrtPipeline(renderer: WebGPURenderer, scene: Scene, camera
     },
     setPower(value) {
       power.value = value;
+    },
+    setRegionGlitch(region, rect, amount) {
+      regions[region].rect.value.set(rect.left, rect.top, rect.right, rect.bottom);
+      regions[region].amount.value = amount;
     },
     setMotion(enabled) {
       motion.value = enabled ? 1 : 0;

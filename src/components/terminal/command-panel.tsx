@@ -80,6 +80,8 @@ export function CommandPanel({ ref, run, onClose }: CommandPanelProps) {
   return (
     <section
       aria-labelledby={titleId}
+      // the GPU layer glitches this rect whenever the key changes (open or new command)
+      data-gl-window={`${run.input}:${run.command}`}
       className="group/panel flex min-h-0 flex-1 flex-col border border-ink-muted focus-within:border-ink"
     >
       <h2

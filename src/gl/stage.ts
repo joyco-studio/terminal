@@ -1,6 +1,6 @@
 import { Color, Group, OrthographicCamera, SRGBColorSpace, Scene, WebGPURenderer } from "three/webgpu";
 import { parseCssColor } from "@/gl/css-color";
-import { createCrtPipeline } from "@/gl/crt";
+import { createCrtPipeline, type CrtPipeline } from "@/gl/crt";
 
 const MAX_PIXEL_RATIO = 2;
 const CAMERA_DEPTH = 10;
@@ -20,6 +20,7 @@ export interface Stage {
   /** Animated tube artefacts (flicker, roll, grain) follow reduced motion. */
   setMotion(enabled: boolean): void;
   setPower(value: number): void;
+  setRegionGlitch: CrtPipeline["setRegionGlitch"];
   dispose(): void;
 }
 
@@ -102,6 +103,7 @@ export async function createStage(canvasParent: HTMLElement, screenColor: string
     },
     setMotion: crt.setMotion,
     setPower: crt.setPower,
+    setRegionGlitch: crt.setRegionGlitch,
     dispose() {
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", resize);

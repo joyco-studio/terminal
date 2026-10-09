@@ -12,6 +12,9 @@ import type { RgbaColor } from "@/gl/css-color";
 
 export interface AsciiLogo {
   mesh: InstancedMesh;
+  /** The art's size in character cells: its ink box, not its container's. */
+  columns: number;
+  rows: number;
   place(placement: AsciiPlacement): void;
   setColor(color: RgbaColor): void;
   dispose(): void;
@@ -27,7 +30,7 @@ export interface AsciiPlacement {
 
 /** One instanced quad per block or box-drawing stroke, drawn in one call. */
 export function createAsciiLogo(art: string): AsciiLogo {
-  const { rects } = asciiToCells(art);
+  const { rects, columns, rows } = asciiToCells(art);
 
   const geometry = new PlaneGeometry(1, 1);
   // origin at the quad's top-left so instance transforms read like CSS boxes
@@ -50,6 +53,8 @@ export function createAsciiLogo(art: string): AsciiLogo {
 
   return {
     mesh,
+    columns,
+    rows,
     place({ x, y, cellWidth, cellHeight }) {
       mesh.position.set(x, -y, 0);
       mesh.scale.set(cellWidth, cellHeight, 1);
