@@ -15,7 +15,7 @@ const CONTROL_HINTS = [
 
 function TopBar() {
   return (
-    <header data-gl-hatch className="diagonal-bg flex items-center justify-between gap-[2ch] border-b px-[2ch] py-[0.5lh] text-caption-mono whitespace-nowrap">
+    <header data-gl-hatch className="diagonal-bg flex items-center justify-between gap-[2ch] border-b px-[6ch] py-[0.5lh] text-caption-mono whitespace-nowrap">
       <div className="flex items-center gap-[2ch]">
         <span className="bg-primary px-[1ch] text-primary-foreground">{SITE.name}</span>
         <span>Terminal v0.1</span>
@@ -54,7 +54,7 @@ function Boot() {
 
 function StatusBar() {
   return (
-    <footer className="flex flex-wrap items-center justify-between gap-x-[2ch] gap-y-[0.5lh] border-t px-[2ch] py-[0.5lh] text-caption-mono text-ink-muted">
+    <footer className="flex flex-wrap items-center justify-between gap-x-[2ch] gap-y-[0.5lh] border-t px-[6ch] py-[0.5lh] text-caption-mono text-ink-muted">
       <p id="prompt-hint" className="flex flex-wrap gap-[1ch]">
         {CONTROL_HINTS.map((hint) => (
           <span key={hint}>[ {hint} ]</span>
