@@ -19,6 +19,15 @@ interface CommandMenuProps {
   onTypeAhead: () => void;
 }
 
+/** Breathing room between the command name and its description. */
+const NAME_GAP_CH = 3;
+/** Letter-spacing (0.06em) makes each glyph ~0.1ch wider than `ch`. */
+const TRACKING_PER_CHAR_CH = 0.1;
+const LONGEST_NAME = Math.max(...COMMANDS.map((command) => command.id.length));
+const NAME_COLUMN_CH = Math.ceil(LONGEST_NAME * (1 + TRACKING_PER_CHAR_CH)) + NAME_GAP_CH;
+/** marker · [n] · name · description */
+const ROW_COLUMNS = `2ch 4ch ${NAME_COLUMN_CH}ch 1fr`;
+
 function wrapIndex(index: number): number {
   return (index + COMMANDS.length) % COMMANDS.length;
 }
@@ -102,7 +111,8 @@ export function CommandMenu({ ref, activeIndex, onMove, onOpen, onTypeAhead }: C
                 onFocus={() => {
                   if (!isActive) onMove(index);
                 }}
-                className={`grid w-full grid-cols-[2ch_4ch_14ch_1fr] px-[1ch] text-left ${
+                style={{ gridTemplateColumns: ROW_COLUMNS }}
+                className={`grid w-full px-[1ch] text-left ${
                   // filled only while the menu holds focus; elsewhere the > marker keeps the place
                   isActive
                     ? "group-focus-within/menu:bg-primary group-focus-within/menu:text-primary-foreground"

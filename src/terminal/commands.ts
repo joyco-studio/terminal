@@ -11,6 +11,7 @@ export const COMMANDS = [
   { id: "showcase", label: "Showcase", description: "Selected work", aliases: ["ls showcase", "work"] },
   { id: "capabilities", label: "Capabilities", description: "What we do", aliases: ["services"] },
   { id: "contact", label: "Contact", description: "Start a project", aliases: ["mail"] },
+  { id: "lab", label: "Lab", description: "Experiments", aliases: ["experiments", "ls lab"] },
   { id: "help", label: "Help", description: "All commands", aliases: ["?", "menu"] },
 ] as const satisfies readonly CommandDefinition[];
 

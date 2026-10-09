@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { SpecList } from "@/components/terminal/spec-list";
 import { CAPABILITIES, CLIENTS, SHOWCASE, SITE, SUMMARY } from "@/content/joyco";
 import { COMMANDS, type CommandId } from "@/terminal/commands";
+import { useLabExperiments } from "@/components/terminal/lab-context";
 
 const ABOUT_ROWS = [
   ["name", SITE.name],
@@ -90,6 +91,28 @@ function ShowcaseOutput() {
   );
 }
 
+/** Tags beyond this are noise in a one-line row. */
+const LAB_TAGS_SHOWN = 3;
+
+function LabOutput() {
+  const experiments = useLabExperiments();
+  return (
+    <ul className="grid grid-cols-[auto_auto_1fr] gap-x-[2ch]">
+      {experiments.map((experiment) => (
+        <li key={experiment.slug} className="col-span-3 grid grid-cols-subgrid">
+          <time dateTime={experiment.date} className="text-ink-muted">
+            {experiment.date}
+          </time>
+          <TerminalLink href={experiment.href} className="justify-self-start" external>
+            {experiment.slug}/
+          </TerminalLink>
+          <span className="text-ink-muted">{experiment.tags.slice(0, LAB_TAGS_SHOWN).join(" · ")}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ContactOutput() {
   return (
     <>
@@ -126,6 +149,7 @@ const OUTPUTS: Record<CommandId, () => ReactNode> = {
   capabilities: CapabilitiesOutput,
   showcase: ShowcaseOutput,
   contact: ContactOutput,
+  lab: LabOutput,
   help: HelpOutput,
 };
 

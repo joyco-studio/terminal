@@ -5,6 +5,8 @@ import { flushSync } from "react-dom";
 import { PromptInput } from "@/components/terminal/command-line";
 import { CommandMenu, type CommandMenuHandle } from "@/components/terminal/command-menu";
 import { CommandPanel, type CommandPanelHandle, type PanelRun } from "@/components/terminal/command-panel";
+import { LabExperimentsContext } from "@/components/terminal/lab-context";
+import type { LabExperiment } from "@/content/lab";
 import { COMMANDS, commandIndex, resolveCommand } from "@/terminal/commands";
 
 const PROMPT_KEY = "/";
@@ -17,9 +19,11 @@ const PROMPT_KEY = "/";
 interface TerminalProps {
   /** Logo and status lines heading the left column; they set its width. */
   intro: ReactNode;
+  /** Lab experiments, fetched on the server. */
+  experiments: readonly LabExperiment[];
 }
 
-export function Terminal({ intro }: TerminalProps) {
+export function Terminal({ intro, experiments }: TerminalProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [run, setRun] = useState<PanelRun | null>(null);
   const [draft, setDraft] = useState("");
@@ -105,7 +109,9 @@ export function Terminal({ intro }: TerminalProps) {
           />
         </div>
       </div>
-      {run && <CommandPanel ref={panelRef} run={run} onClose={close} />}
+      <LabExperimentsContext value={experiments}>
+        {run && <CommandPanel ref={panelRef} run={run} onClose={close} />}
+      </LabExperimentsContext>
     </div>
   );
 }

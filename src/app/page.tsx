@@ -2,6 +2,7 @@ import { GpuTextRoot } from "@/components/gl/gpu-text-root";
 import { StudioClock } from "@/components/terminal/studio-clock";
 import { Terminal } from "@/components/terminal/terminal";
 import { ASCII_LOGO, SITE } from "@/content/joyco";
+import { getLabExperiments } from "@/content/lab-source";
 import { COMMANDS } from "@/terminal/commands";
 
 const CONTROL_HINTS = [
@@ -64,13 +65,14 @@ function StatusBar() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const experiments = await getLabExperiments();
   return (
     <GpuTextRoot className="flex h-svh flex-col overflow-hidden font-mono text-blog-mono">
       <TopBar />
       <main className="flex min-h-0 flex-1 flex-col gap-[1lh] px-[2ch] py-[1lh]">
         <h1 className="sr-only">{SITE.name} terminal</h1>
-        <Terminal intro={<Boot />} />
+        <Terminal intro={<Boot />} experiments={experiments} />
       </main>
       <StatusBar />
     </GpuTextRoot>
