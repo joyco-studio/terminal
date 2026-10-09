@@ -24,6 +24,16 @@ export const SITE = {
   documentCount: 28,
 } as const;
 
+/** The same opening hours as SITE.days / SITE.hours, in machine-readable form. */
+export const STUDIO_HOURS = {
+  timeZone: "America/Argentina/Buenos_Aires",
+  /** ISO weekdays: 1 = Monday … 7 = Sunday. */
+  openWeekdays: [1, 2, 3, 4, 5],
+  opensAtHour: 9,
+  closesAtHour: 18,
+  zoneLabel: "ART",
+} as const;
+
 export const SUMMARY =
   "JOYCO is a design and engineering studio working on brands, websites and digital products with clients all around the world. Based in Buenos Aires, Argentina.";
 

@@ -11,8 +11,7 @@ export const COMMANDS = [
   { id: "showcase", label: "Showcase", description: "Selected work", aliases: ["ls showcase", "work"] },
   { id: "capabilities", label: "Capabilities", description: "What we do", aliases: ["services"] },
   { id: "contact", label: "Contact", description: "Start a project", aliases: ["mail"] },
-  { id: "help", label: "Help", description: "Every command and alias", aliases: ["?", "menu"] },
-  { id: "clear", label: "Clear", description: "Wipe the screen", aliases: ["cls"] },
+  { id: "help", label: "Help", description: "All commands", aliases: ["?", "menu"] },
 ] as const satisfies readonly CommandDefinition[];
 
 export type CommandId = (typeof COMMANDS)[number]["id"];
@@ -35,4 +34,8 @@ export function resolveCommand(input: string): CommandId | null {
       command.id === normalized || command.aliases.some((alias) => alias === normalized),
   );
   return match?.id ?? commandAtShortcut(normalized);
+}
+
+export function commandIndex(id: CommandId): number {
+  return COMMANDS.findIndex((command) => command.id === id);
 }

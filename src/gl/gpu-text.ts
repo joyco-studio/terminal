@@ -4,12 +4,15 @@ import { createBoxLayer } from "@/gl/box-layer";
 import { collectBoxRuns } from "@/gl/box-runs";
 import { parseCssColor } from "@/gl/css-color";
 import { FONT_SOURCES } from "@/gl/font-metrics";
-import { createStage, type RenderBackend } from "@/gl/stage";
+import { INITIAL_BOOT_PROGRESS, type BootProgress, type RenderBackend } from "@/gl/boot-progress";
+import { createStage } from "@/gl/stage";
 import { createTextLayer } from "@/gl/text-layer";
 import { collectTextRuns } from "@/gl/text-runs";
 
 const ASCII_SELECTOR = "[data-gl-ascii]";
-const LOGO_REVEAL_MS = 900;
+/** The tube's power-on; content effects start as the picture opens. */
+const POWER_ON_MS = 1400;
+const CONTENT_REVEAL_DELAY_MS = 450;
 /** DOM events that change what is painted without a mutation: typing, caret, focus. */
 const RESYNC_EVENTS = ["input", "keyup", "focusin", "focusout"] as const;
 const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
@@ -56,11 +59,28 @@ function syncLogo(logo: AsciiLogo, pre: HTMLElement): void {
 /**
  * Takes over drawing every glyph under `root`: DOM keeps layout, semantics
  * and input, lettra draws the text on a WebGPU (or WebGL2) canvas on top.
+ * Resolves once the first frame is compiled, reporting each stage on the way.
  */
-export async function startGpuText(root: HTMLElement): Promise<GpuTextSession> {
+export async function startGpuText(
+  root: HTMLElement,
+  onProgress: (progress: BootProgress) => void = () => {},
+): Promise<GpuTextSession> {
+  let progress = INITIAL_BOOT_PROGRESS;
+  const report = (next: Partial<BootProgress>) => {
+    progress = { ...progress, ...next };
+    onProgress(progress);
+  };
+
   const family = defineFamily({ src: FONT_SOURCES });
   const screenColor = getComputedStyle(document.body).backgroundColor;
-  const [stage] = await Promise.all([createStage(document.body, screenColor), family.loadAll()]);
+  const loadFonts = FONT_SOURCES.map(({ weight }) =>
+    family.load({ weight }).then(() => report({ fontsLoaded: progress.fontsLoaded + 1 })),
+  );
+  const createDevice = createStage(document.body, screenColor).then((created) => {
+    report({ backend: created.backend });
+    return created;
+  });
+  const [stage] = await Promise.all([createDevice, ...loadFonts]);
   family.warmup(stage.renderer);
 
   const boxes = createBoxLayer();
@@ -88,7 +108,6 @@ export async function startGpuText(root: HTMLElement): Promise<GpuTextSession> {
     logo.mesh.renderOrder = RENDER_ORDER.glyphs;
     stage.content.add(logo.mesh);
   }
-  const logoRevealStart = performance.now();
 
   const sync = () => {
     boxes.sync(collectBoxRuns(root));
@@ -117,19 +136,29 @@ export async function startGpuText(root: HTMLElement): Promise<GpuTextSession> {
   resizes.observe(root);
   for (const type of RESYNC_EVENTS) root.addEventListener(type, scheduleSync);
   document.addEventListener("selectionchange", scheduleSync);
+  // scroll does not bubble; capture catches the panel's inner scroll too
+  document.addEventListener("scroll", scheduleSync, { capture: true });
   void document.fonts.ready.then(scheduleSync);
 
   sync();
+  await stage.compile();
+  report({ shadersReady: true });
+
+  // the boot effects play now that something can see them
+  const powerOnStart = performance.now();
+  const revealAt = powerOnStart + (prefersReducedMotion() ? 0 : CONTENT_REVEAL_DELAY_MS);
+  textLayer.replayDecode(revealAt);
+
   if (process.env.NODE_ENV === "development") {
-    Object.assign(window, { __gpuText: { stage, runs: () => collectTextRuns(root) } });
+    Object.assign(window, {
+      __gpuText: { stage, runs: () => collectTextRuns(root), boxes: () => collectBoxRuns(root) },
+    });
   }
   stage.start(() => {
     const now = performance.now();
     textLayer.update(now);
-    if (logo) {
-      const progress = prefersReducedMotion() ? 1 : (now - logoRevealStart) / LOGO_REVEAL_MS;
-      logo.reveal.value = Math.min(1, progress);
-    }
+    const power = prefersReducedMotion() ? 1 : (now - powerOnStart) / POWER_ON_MS;
+    stage.setPower(Math.min(1, power));
   });
 
   return {
@@ -140,6 +169,7 @@ export async function startGpuText(root: HTMLElement): Promise<GpuTextSession> {
       resizes.disconnect();
       for (const type of RESYNC_EVENTS) root.removeEventListener(type, scheduleSync);
       document.removeEventListener("selectionchange", scheduleSync);
+      document.removeEventListener("scroll", scheduleSync, { capture: true });
       motionQuery.removeEventListener("change", applyMotion);
       boxes.dispose();
       textLayer.dispose();

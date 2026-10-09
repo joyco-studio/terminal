@@ -1,5 +1,4 @@
 import {
-  DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
@@ -11,7 +10,7 @@ import {
 import {
   float,
   fract,
-  instancedBufferAttribute,
+  instancedDynamicBufferAttribute,
   mod,
   positionWorld,
   select,
@@ -45,23 +44,32 @@ export function createBoxLayer(): BoxLayer {
   geometry.translate(0.5, -0.5, 0);
 
   const colors = new InstancedBufferAttribute(new Float32Array(CAPACITY * 4), 4);
-  const patterns = new InstancedBufferAttribute(new Float32Array(CAPACITY), 1);
-  colors.setUsage(DynamicDrawUsage);
-  patterns.setUsage(DynamicDrawUsage);
-
-  const fill = instancedBufferAttribute<"vec4">(colors);
-  const pattern = instancedBufferAttribute<"float">(patterns);
+  /** (pattern id, pattern size in px) per instance. */
+  const patterns = new InstancedBufferAttribute(new Float32Array(CAPACITY * 2), 2);
+  // the dynamic variant matters: the static one re-flags these buffers as
+  // static, and the GPU keeps the first upload forever
+  const fill = instancedDynamicBufferAttribute<"vec4">(colors);
+  const patternData = instancedDynamicBufferAttribute<"vec2">(patterns);
+  const pattern = patternData.x;
+  const dotSize = patternData.y;
   const motion = uniform(1);
 
   // diagonal hatch in document space, so it scrolls with the page
   const diagonal = mod(positionWorld.x.add(positionWorld.y), float(HATCH_PERIOD));
   const hatch = step(diagonal, float(HATCH_LINE));
+  // dots in document space: on for one dot, off for one dot
+  const dottedX = step(mod(positionWorld.x, dotSize.mul(2)), dotSize);
+  const dottedY = step(mod(positionWorld.y, dotSize.mul(2)), dotSize);
   const blinkOn = step(fract(time.mul(CARET_BLINK_HZ)), float(0.5));
   const caret = select(motion.greaterThan(0.5), blinkOn, float(1));
   const mask = select(
     pattern.lessThan(0.5),
     float(1),
-    select(pattern.lessThan(1.5), hatch, caret),
+    select(
+      pattern.lessThan(1.5),
+      hatch,
+      select(pattern.lessThan(2.5), caret, select(pattern.lessThan(3.5), dottedX, dottedY)),
+    ),
   );
 
   const material = new MeshBasicNodeMaterial({ transparent: true, depthWrite: false });
@@ -85,7 +93,7 @@ export function createBoxLayer(): BoxLayer {
         // the instanced attribute bypasses color management, so convert here
         color.setRGB(box.color.r, box.color.g, box.color.b, SRGBColorSpace);
         colors.setXYZW(index, color.r, color.g, color.b, box.color.a);
-        patterns.setX(index, box.pattern);
+        patterns.setXY(index, box.pattern, box.patternSize ?? 0);
       }
       mesh.count = count;
       mesh.instanceMatrix.needsUpdate = true;

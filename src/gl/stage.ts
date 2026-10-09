@@ -5,16 +5,21 @@ import { createCrtPipeline } from "@/gl/crt";
 const MAX_PIXEL_RATIO = 2;
 const CAMERA_DEPTH = 10;
 
-export type RenderBackend = "webgpu" | "webgl2";
+import type { RenderBackend } from "@/gl/boot-progress";
+
+export type { RenderBackend };
 
 export interface Stage {
   renderer: WebGPURenderer;
   /** Children are placed in document px, y negated (y-up world). */
   content: Group;
   backend: RenderBackend;
+  /** Compiles every pipeline in the scene plus the CRT pass, off the first frame. */
+  compile(): Promise<void>;
   start(onFrame: (now: number) => void): void;
   /** Animated tube artefacts (flicker, roll, grain) follow reduced motion. */
   setMotion(enabled: boolean): void;
+  setPower(value: number): void;
   dispose(): void;
 }
 
@@ -82,6 +87,11 @@ export async function createStage(canvasParent: HTMLElement, screenColor: string
     renderer,
     content,
     backend,
+    async compile() {
+      await renderer.compileAsync(scene, camera);
+      crt.render();
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    },
     start(onFrame) {
       renderer.setAnimationLoop((now: number) => {
         onFrame(now);
@@ -91,6 +101,7 @@ export async function createStage(canvasParent: HTMLElement, screenColor: string
       });
     },
     setMotion: crt.setMotion,
+    setPower: crt.setPower,
     dispose() {
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", resize);

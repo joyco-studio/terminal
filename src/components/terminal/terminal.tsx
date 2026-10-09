@@ -1,78 +1,111 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { CommandLine, PromptInput } from "@/components/terminal/command-line";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
+import { PromptInput } from "@/components/terminal/command-line";
 import { CommandMenu, type CommandMenuHandle } from "@/components/terminal/command-menu";
-import { CommandOutput } from "@/components/terminal/outputs";
-import { resolveCommand, type CommandId } from "@/terminal/commands";
+import { CommandPanel, type CommandPanelHandle, type PanelRun } from "@/components/terminal/command-panel";
+import { COMMANDS, commandIndex, resolveCommand } from "@/terminal/commands";
 
-interface LogEntry {
-  id: number;
-  input: string;
-  command: Exclude<CommandId, "clear"> | null;
+const PROMPT_KEY = "/";
+
+/**
+ * Menu, output window and prompt as one shell: every menu option is a
+ * command, picking one runs it, typing one in the prompt does the same. The
+ * window exists only while a command is open; q or Escape closes it.
+ */
+interface TerminalProps {
+  /** Logo and status lines heading the left column; they set its width. */
+  intro: ReactNode;
 }
 
-function scrollBehavior(): ScrollBehavior {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-}
-
-/** Session log, menu and prompt. Owns what has been run so far. */
-export function Terminal() {
-  const [entries, setEntries] = useState<readonly LogEntry[]>([]);
+export function Terminal({ intro }: TerminalProps) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [run, setRun] = useState<PanelRun | null>(null);
   const [draft, setDraft] = useState("");
-  const nextId = useRef(0);
-  const latestEntryRef = useRef<HTMLDivElement>(null);
+  /** What was typed when a command was not found; shown under the window, by the prompt. */
+  const [notFound, setNotFound] = useState<string | null>(null);
   const menuRef = useRef<CommandMenuHandle>(null);
+  const panelRef = useRef<CommandPanelHandle>(null);
   const promptRef = useRef<HTMLInputElement>(null);
 
-  // keyboard-only: if focus ever falls to <body>, the next key goes back to the menu
+  // keyboard-only: "/" jumps to the prompt from anywhere outside it, and if
+  // focus ever falls to <body>, the next key goes back to the menu
   useEffect(() => {
-    const recoverFocus = () => {
+    const handleGlobalKey = (event: KeyboardEvent) => {
+      const prompt = promptRef.current;
+      if (event.key === PROMPT_KEY && prompt && document.activeElement !== prompt) {
+        event.preventDefault();
+        prompt.focus();
+        return;
+      }
       if (document.activeElement === document.body) menuRef.current?.focus();
     };
-    document.addEventListener("keydown", recoverFocus, { capture: true });
-    return () => document.removeEventListener("keydown", recoverFocus, { capture: true });
+    document.addEventListener("keydown", handleGlobalKey, { capture: true });
+    return () => document.removeEventListener("keydown", handleGlobalKey, { capture: true });
   }, []);
 
-  useEffect(() => {
-    latestEntryRef.current?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
-  }, [entries]);
-
-  const run = (input: string) => {
+  const execute = (input: string) => {
     const trimmed = input.trim();
     if (!trimmed) return;
 
     setDraft("");
     const command = resolveCommand(trimmed);
-    if (command === "clear") {
-      setEntries([]);
+    // an unknown command is a shell error, not content: report it by the prompt, keep focus there
+    if (!command) {
+      setNotFound(trimmed);
       return;
     }
-    setEntries((previous) => [...previous, { id: nextId.current++, input: trimmed, command }]);
+
+    setNotFound(null);
+    setActiveIndex(commandIndex(command));
+    // render the output first so the window can select its first link
+    flushSync(() => setRun({ input: trimmed, command }));
+    panelRef.current?.enter();
+  };
+
+  const runOption = (index: number) => execute(COMMANDS[index].id);
+
+  const close = () => {
+    setRun(null);
+    menuRef.current?.focus();
   };
 
   return (
-    <>
-      <div role="log" aria-label="Terminal output" aria-live="polite">
-        {entries.map((entry, index) => (
-          <div
-            key={entry.id}
-            ref={index === entries.length - 1 ? latestEntryRef : undefined}
-            className="scroll-mt-[1lh]"
-          >
-            <CommandLine command={entry.input} />
-            <CommandOutput command={entry.command} input={entry.input} />
-          </div>
-        ))}
+    <div className="flex min-h-0 flex-1 flex-col gap-[1lh] md:flex-row md:gap-[2ch]">
+      {/* left column: as wide as the intro block, menu stretched to match, prompt at the foot */}
+      <div className="flex min-h-0 shrink-0 flex-col gap-[1lh] md:w-max">
+        <header>{intro}</header>
+        <CommandMenu
+          ref={menuRef}
+          activeIndex={activeIndex}
+          onMove={setActiveIndex}
+          onOpen={runOption}
+          onTypeAhead={() => promptRef.current?.focus()}
+        />
+        <div className="mt-auto flex flex-col">
+          <p role="status" className="min-h-[1lh]">
+            {notFound && (
+              <>
+                <span className="text-ink-muted">[ ERR ]</span> command not found: {notFound} · try help
+              </>
+            )}
+          </p>
+          <PromptInput
+            ref={promptRef}
+            value={draft}
+            onChange={(value) => {
+              // "/" only summons the prompt; whatever the keyboard layout, it never lands as text
+              if (value === PROMPT_KEY) return;
+              setNotFound(null);
+              setDraft(value);
+            }}
+            onSubmit={execute}
+            onExit={() => menuRef.current?.focus()}
+          />
+        </div>
       </div>
-      <CommandMenu ref={menuRef} onSelect={run} onTypeAhead={() => promptRef.current?.focus()} />
-      <PromptInput
-        ref={promptRef}
-        value={draft}
-        onChange={setDraft}
-        onSubmit={run}
-        onExit={() => menuRef.current?.focus()}
-      />
-    </>
+      {run && <CommandPanel ref={panelRef} run={run} onClose={close} />}
+    </div>
   );
 }

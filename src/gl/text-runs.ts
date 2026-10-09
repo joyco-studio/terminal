@@ -1,4 +1,4 @@
-import { ASCENT_EM } from "@/gl/font-metrics";
+import { ASCENT_EM, CONTENT_HEIGHT_EM } from "@/gl/font-metrics";
 import { measureInputLine } from "@/gl/input-metrics";
 
 /** One visual line of DOM text, measured in document px. */
@@ -13,6 +13,9 @@ export interface TextRun {
   letterSpacing: number;
   color: string;
 }
+
+/** Scroll regions: lines outside their box are not drawn. */
+const CLIP_SELECTOR = "[data-gl-clip]";
 
 /** Subtrees another layer draws (the ASCII logo) or nobody sees. */
 const SKIP_SELECTOR = "[data-gl-ascii], .sr-only";
@@ -96,16 +99,17 @@ function textNodeRuns(node: Text, range: Range, scroll: DOMPointReadOnly): TextR
   if (!parent) return [];
   const type = readTypeStyle(getComputedStyle(parent));
   const id = sourceId(node);
+  const clip = parent.closest(CLIP_SELECTOR)?.getBoundingClientRect();
+  const lineHeight = type.fontSize * CONTENT_HEIGHT_EM;
+  // whole lines in or out, like a terminal scrolling by rows
+  const isInsideClip = (line: LineSlice) =>
+    !clip || (line.top >= clip.top - 1 && line.top + lineHeight <= clip.bottom + 1);
 
-  return measureLines(node, range).map((line, index) =>
-    toRun(
-      `${id}:${index}`,
-      node.data.slice(line.start, line.end),
-      line.left + scroll.x,
-      line.top + scroll.y,
-      type,
-    ),
-  );
+  return measureLines(node, range).flatMap((line, index) => {
+    if (!isInsideClip(line)) return [];
+    const text = node.data.slice(line.start, line.end);
+    return [toRun(`${id}:${index}`, text, line.left + scroll.x, line.top + scroll.y, type)];
+  });
 }
 
 function inputRun(input: HTMLInputElement, scroll: DOMPointReadOnly): TextRun | null {

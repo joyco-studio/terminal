@@ -34,6 +34,8 @@ export interface TextLayerOptions {
 export interface TextLayer {
   sync(runs: readonly TextRun[], now: number): void;
   update(now: number): void;
+  /** Restarts the decode on every line, e.g. once a loader has cleared. */
+  replayDecode(now: number): void;
   dispose(): void;
 }
 
@@ -135,6 +137,17 @@ export function createTextLayer({ group, family, renderOrder, reducedMotion }: T
         const progress = Math.min(1, Math.max(0, (now - entry.decode.start) / entry.decode.duration));
         entry.handle.uniforms.scramble.value = 1 - easeOutCubic(progress);
         if (progress === 1) entry.decode = null;
+      }
+    },
+
+    replayDecode(now) {
+      if (reducedMotion()) return;
+      let order = 0;
+      for (const entry of live.values()) {
+        const delay = Math.min(order * DECODE_STAGGER_MS, DECODE_MAX_DELAY_MS);
+        entry.decode = { start: now + delay, duration: DECODE_DURATION_MS };
+        entry.handle.uniforms.scramble.value = 1;
+        order++;
       }
     },
 

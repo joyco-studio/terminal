@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useRef, useState, type KeyboardEvent, type Ref } from "react";
-import { SectionRule } from "@/components/terminal/section-rule";
-import { COMMANDS, type CommandId } from "@/terminal/commands";
+import { useEffect, useImperativeHandle, useRef, type KeyboardEvent, type Ref } from "react";
+import { COMMANDS } from "@/terminal/commands";
 
 export interface CommandMenuHandle {
   /** Returns focus to the active item. */
@@ -11,9 +10,17 @@ export interface CommandMenuHandle {
 
 interface CommandMenuProps {
   ref?: Ref<CommandMenuHandle>;
-  onSelect: (command: CommandId) => void;
+  activeIndex: number;
+  /** Arrow keys: move the selection. */
+  onMove: (index: number) => void;
+  /** Enter or Space: run the item's command. */
+  onOpen: (index: number) => void;
   /** A printable key that is not a shortcut: hand it to the prompt. */
   onTypeAhead: () => void;
+}
+
+function wrapIndex(index: number): number {
+  return (index + COMMANDS.length) % COMMANDS.length;
 }
 
 function isTypeAhead(event: KeyboardEvent): boolean {
@@ -22,17 +29,12 @@ function isTypeAhead(event: KeyboardEvent): boolean {
   return printable && !modified;
 }
 
-function wrapIndex(index: number): number {
-  return (index + COMMANDS.length) % COMMANDS.length;
-}
-
 /**
- * Game-style main menu. Roving tabindex: Tab enters on the active item,
- * arrows move it, Enter/Space run it, digits jump straight to a command,
- * any other letter starts typing in the prompt.
+ * BIOS-style menu of commands. Roving tabindex: Tab enters on the active
+ * item, arrows or a digit move it, Enter/Space run its command, any other
+ * letter starts typing in the prompt.
  */
-export function CommandMenu({ ref, onSelect, onTypeAhead }: CommandMenuProps) {
-  const [activeIndex, setActiveIndex] = useState(0);
+export function CommandMenu({ ref, activeIndex, onMove, onOpen, onTypeAhead }: CommandMenuProps) {
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   useImperativeHandle(ref, () => ({
@@ -43,18 +45,18 @@ export function CommandMenu({ ref, onSelect, onTypeAhead }: CommandMenuProps) {
     itemRefs.current[0]?.focus({ preventScroll: true });
   }, []);
 
-  const focusItem = (index: number) => {
+  const moveTo = (index: number) => {
     const next = wrapIndex(index);
-    setActiveIndex(next);
+    onMove(next);
     itemRefs.current[next]?.focus();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
     const keyActions: Record<string, () => void> = {
-      ArrowDown: () => focusItem(activeIndex + 1),
-      ArrowUp: () => focusItem(activeIndex - 1),
-      Home: () => focusItem(0),
-      End: () => focusItem(COMMANDS.length - 1),
+      ArrowDown: () => moveTo(activeIndex + 1),
+      ArrowUp: () => moveTo(activeIndex - 1),
+      Home: () => moveTo(0),
+      End: () => moveTo(COMMANDS.length - 1),
     };
     const action = keyActions[event.key];
     if (action) {
@@ -63,11 +65,11 @@ export function CommandMenu({ ref, onSelect, onTypeAhead }: CommandMenuProps) {
       return;
     }
 
-    const shortcut = COMMANDS[Number(event.key) - 1];
-    if (shortcut) {
+    // a digit only selects; Enter is what runs, like every other row
+    const shortcutIndex = Number(event.key) - 1;
+    if (COMMANDS[shortcutIndex]) {
       event.preventDefault();
-      focusItem(Number(event.key) - 1);
-      onSelect(shortcut.id);
+      moveTo(shortcutIndex);
       return;
     }
 
@@ -76,9 +78,13 @@ export function CommandMenu({ ref, onSelect, onTypeAhead }: CommandMenuProps) {
   };
 
   return (
-    <nav aria-label="Main menu">
-      <SectionRule title="Main menu" />
-      <ul className="mt-[0.5lh] flex flex-col" onKeyDown={handleKeyDown}>
+    <nav aria-label="Main menu" className="flex flex-col">
+      <h2 className="flex items-center gap-[1ch] px-[1ch] text-caption-mono">
+        <span aria-hidden="true" className="h-px w-[2ch] bg-ink" />
+        <span>Main menu</span>
+        <span aria-hidden="true" className="h-px flex-1 bg-ink-muted" />
+      </h2>
+      <ul className="group/menu mt-[0.5lh] flex flex-col" onKeyDown={handleKeyDown}>
         {COMMANDS.map((command, index) => {
           const isActive = index === activeIndex;
           return (
@@ -88,22 +94,25 @@ export function CommandMenu({ ref, onSelect, onTypeAhead }: CommandMenuProps) {
                   itemRefs.current[index] = node;
                 }}
                 type="button"
+                data-gl-own-focus
                 tabIndex={isActive ? 0 : -1}
+                aria-current={isActive ? "true" : undefined}
                 aria-keyshortcuts={String(index + 1)}
-                onClick={() => onSelect(command.id)}
-                onFocus={() => setActiveIndex(index)}
-                className={`grid w-full max-w-[60ch] grid-cols-[2ch_4ch_14ch_1fr] text-left uppercase ${
-                  isActive ? "bg-primary text-primary-foreground" : "hover:bg-screen-border"
+                onClick={() => onOpen(index)}
+                onFocus={() => {
+                  if (!isActive) onMove(index);
+                }}
+                className={`grid w-full grid-cols-[2ch_4ch_14ch_1fr] px-[1ch] text-left ${
+                  // filled only while the menu holds focus; elsewhere the > marker keeps the place
+                  isActive
+                    ? "group-focus-within/menu:bg-primary group-focus-within/menu:text-primary-foreground"
+                    : "text-ink-muted"
                 }`}
               >
                 <span aria-hidden="true">{isActive ? ">" : ""}</span>
-                <span aria-hidden="true" className={isActive ? "" : "text-ink-muted"}>
-                  [{index + 1}]
-                </span>
-                <span>{command.label}</span>
-                <span className={`normal-case ${isActive ? "" : "text-ink-muted"}`}>
-                  {command.description}
-                </span>
+                <span aria-hidden="true">[{index + 1}]</span>
+                <span>{command.id}</span>
+                <span className="whitespace-nowrap">{command.description}</span>
               </button>
             </li>
           );

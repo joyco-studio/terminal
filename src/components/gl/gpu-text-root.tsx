@@ -1,15 +1,10 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { RenderBackend } from "@/gl/stage";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { BootLoader } from "@/components/gl/boot-loader";
+import { INITIAL_BOOT_PROGRESS, type BootProgress, type RenderBackend } from "@/gl/boot-progress";
 
 export type TextRenderer = "dom" | RenderBackend;
-
-const TextRendererContext = createContext<TextRenderer>("dom");
-
-export function useTextRenderer(): TextRenderer {
-  return useContext(TextRendererContext);
-}
 
 interface GpuTextRootProps {
   children: ReactNode;
@@ -17,13 +12,15 @@ interface GpuTextRootProps {
 }
 
 /**
- * Progressive enhancement: children render as plain DOM text until lettra is
- * up, then `data-text-renderer` hides the DOM glyphs (layout stays) and the
- * GPU draws them. Any failure leaves the DOM version in place.
+ * Progressive enhancement: a boot loader covers the page while the GPU comes
+ * up, then the canvas takes over every pixel and the DOM below only keeps
+ * layout, focus and semantics. Any failure drops the loader and leaves the
+ * plain DOM terminal in place.
  */
 export function GpuTextRoot({ children, className }: GpuTextRootProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [renderer, setRenderer] = useState<TextRenderer>("dom");
+  const [boot, setBoot] = useState<BootProgress | null>(INITIAL_BOOT_PROGRESS);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -34,7 +31,11 @@ export function GpuTextRoot({ children, className }: GpuTextRootProps) {
 
     const start = () =>
       import("@/gl/gpu-text")
-        .then(({ startGpuText }) => startGpuText(root))
+        .then(({ startGpuText }) =>
+          startGpuText(root, (progress) => {
+            if (!cancelled) setBoot(progress);
+          }),
+        )
         .then((session) => {
           if (cancelled) {
             session.dispose();
@@ -42,9 +43,11 @@ export function GpuTextRoot({ children, className }: GpuTextRootProps) {
           }
           dispose = session.dispose;
           setRenderer(session.backend);
+          setBoot(null);
         })
         .catch((error: unknown) => {
           console.warn("GPU text unavailable, keeping DOM text.", error);
+          if (!cancelled) setBoot(null);
         });
 
     // Deferred one task so a StrictMode mount/unmount/mount never boots two
@@ -60,22 +63,11 @@ export function GpuTextRoot({ children, className }: GpuTextRootProps) {
   }, []);
 
   return (
-    <TextRendererContext value={renderer}>
+    <>
       <div ref={rootRef} data-text-renderer={renderer} className={className}>
         {children}
       </div>
-    </TextRendererContext>
+      {boot && <BootLoader progress={boot} />}
+    </>
   );
-}
-
-const BACKEND_LABEL: Record<TextRenderer, string> = {
-  dom: "DOM",
-  webgpu: "WebGPU",
-  webgl2: "WebGL2",
-};
-
-/** Header badge naming what is actually drawing the text right now. */
-export function RendererBadge() {
-  const renderer = useTextRenderer();
-  return <span className="border px-[1ch]">{BACKEND_LABEL[renderer]}</span>;
 }

@@ -1,32 +1,30 @@
-import { GpuTextRoot, RendererBadge } from "@/components/gl/gpu-text-root";
-import { CommandLine } from "@/components/terminal/command-line";
+import { GpuTextRoot } from "@/components/gl/gpu-text-root";
+import { StudioClock } from "@/components/terminal/studio-clock";
 import { Terminal } from "@/components/terminal/terminal";
 import { ASCII_LOGO, SITE } from "@/content/joyco";
 import { COMMANDS } from "@/terminal/commands";
 
 const CONTROL_HINTS = [
-  "Arrows navigate",
-  "Enter select",
-  `1-${COMMANDS.length} shortcut`,
-  "Type to prompt",
-  "Esc to menu",
+  "Arrows select",
+  "Enter run",
+  `1-${COMMANDS.length} jump`,
+  "/ to type",
+  "Q/Esc close",
 ] as const;
 
 function TopBar() {
   return (
-    <header data-gl-hatch className="diagonal-bg flex items-center justify-between gap-[2ch] border-b px-[2ch] py-[0.5lh] text-caption-mono">
+    <header data-gl-hatch className="diagonal-bg flex items-center justify-between gap-[2ch] border-b px-[2ch] py-[0.5lh] text-caption-mono whitespace-nowrap">
       <div className="flex items-center gap-[2ch]">
-        <span className="bg-ink px-[1ch] text-screen">{SITE.name}</span>
+        <span className="bg-primary px-[1ch] text-primary-foreground">{SITE.name}</span>
         <span>Terminal v0.1</span>
       </div>
-      <div className="hidden items-center gap-[2ch] text-ink-muted md:flex">
+      <div className="hidden items-center gap-[2ch] text-ink-muted lg:flex">
         <span>{SITE.coordinates}</span>
         <span aria-hidden="true">·</span>
-        <span>
-          {SITE.days} {SITE.hours} {SITE.timezone}
-        </span>
+        <StudioClock />
       </div>
-      <RendererBadge />
+      <span className="bg-primary px-[1ch] text-primary-foreground">Rebels online</span>
     </header>
   );
 }
@@ -42,12 +40,12 @@ function Boot() {
       >
         {ASCII_LOGO}
       </pre>
-      <p className="mt-[1lh] text-caption-mono text-ink-muted">
+      <p className="mt-[0.5lh] text-caption-mono text-ink-muted">
         {SITE.tagline} · {SITE.url} · {SITE.hotline}
       </p>
-      <CommandLine command={`connect ${SITE.url}`} />
-      <p>
-        <span className="text-ink-muted">[ OK ]</span> {SITE.documentCount} documents · text/markdown
+      <p className="mt-[0.5lh]">
+        <span className="text-ink-muted">[ OK ]</span> connected to {SITE.url} · {SITE.documentCount}{" "}
+        documents
       </p>
     </>
   );
@@ -61,19 +59,18 @@ function StatusBar() {
           <span key={hint}>[ {hint} ]</span>
         ))}
       </p>
-      <p>lettra · three/webgpu · tsl</p>
+      <p>Rendered with lettra</p>
     </footer>
   );
 }
 
 export default function Home() {
   return (
-    <GpuTextRoot className="flex min-h-svh flex-col font-mono text-blog-mono">
+    <GpuTextRoot className="flex h-svh flex-col overflow-hidden font-mono text-blog-mono">
       <TopBar />
-      <main className="flex flex-1 flex-col px-[2ch] py-[1lh]">
+      <main className="flex min-h-0 flex-1 flex-col gap-[1lh] px-[2ch] py-[1lh]">
         <h1 className="sr-only">{SITE.name} terminal</h1>
-        <Boot />
-        <Terminal />
+        <Terminal intro={<Boot />} />
       </main>
       <StatusBar />
     </GpuTextRoot>

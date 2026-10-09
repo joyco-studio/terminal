@@ -4,8 +4,6 @@ export interface CellRect {
   y: number;
   width: number;
   height: number;
-  /** Column of the source character, for left-to-right reveals. */
-  column: number;
 }
 
 type Segment = readonly [x0: number, y0: number, x1: number, y1: number];
@@ -62,12 +60,11 @@ function segmentToRect([x0, y0, x1, y1]: Segment, column: number, row: number): 
     y: row + top,
     width: Math.abs(x1 - x0) + STROKE,
     height: Math.abs(y1 - y0) + STROKE,
-    column,
   };
 }
 
 function glyphRects(char: string, column: number, row: number): CellRect[] {
-  if (char === FULL_BLOCK) return [{ x: column, y: row, width: 1, height: 1, column }];
+  if (char === FULL_BLOCK) return [{ x: column, y: row, width: 1, height: 1 }];
   const segments = BOX_SEGMENTS[char] ?? [];
   return segments.map((segment) => segmentToRect(segment, column, row));
 }

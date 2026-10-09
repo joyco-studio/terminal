@@ -1,4 +1,4 @@
-import { SectionRule } from "@/components/terminal/section-rule";
+import type { ReactNode } from "react";
 import { SpecList } from "@/components/terminal/spec-list";
 import { CAPABILITIES, CLIENTS, SHOWCASE, SITE, SUMMARY } from "@/content/joyco";
 import { COMMANDS, type CommandId } from "@/terminal/commands";
@@ -20,13 +20,36 @@ const CONTACT_ROWS = [
   ["hours", `${SITE.days} · ${SITE.hours} ${SITE.timezone}`],
 ] as const;
 
-const LINK_CLASS =
-  "underline decoration-1 underline-offset-4 hover:bg-primary hover:text-primary-foreground";
+interface TerminalLinkProps {
+  href: string;
+  children: ReactNode;
+  className?: string;
+  /** Opens in a new tab so the terminal session survives. */
+  external?: boolean;
+}
+
+/**
+ * A selectable row target: arrows in the panel move between these, the
+ * selected one fills like a menu item (that fill is its focus indicator).
+ */
+function TerminalLink({ href, children, className = "", external = false }: TerminalLinkProps) {
+  return (
+    <a
+      href={href}
+      data-gl-own-focus
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      className={`underline decoration-1 underline-offset-4 focus-visible:bg-primary focus-visible:text-primary-foreground focus-visible:no-underline ${className}`}
+    >
+      {children}
+      {external && <span className="sr-only"> (opens in a new tab)</span>}
+    </a>
+  );
+}
 
 function AboutOutput() {
   return (
     <>
-      <SectionRule title="About" />
       <SpecList rows={ABOUT_ROWS} />
       <p className="mt-[1lh] max-w-[72ch]">{SUMMARY}</p>
     </>
@@ -36,7 +59,6 @@ function AboutOutput() {
 function CapabilitiesOutput() {
   return (
     <>
-      <SectionRule title="Capabilities" />
       <ol className="flex flex-col">
         {CAPABILITIES.map((capability, index) => (
           <li key={capability.title} className="flex flex-wrap gap-x-[2ch]">
@@ -53,14 +75,13 @@ function CapabilitiesOutput() {
 function ShowcaseOutput() {
   return (
     <>
-      <SectionRule title="Showcase" />
       <ul className="grid grid-cols-[auto_auto_1fr] gap-x-[2ch]">
         {SHOWCASE.map((project) => (
           <li key={project.slug} className="col-span-3 grid grid-cols-subgrid">
             <span className="text-ink-muted">{project.year}</span>
-            <a href={`${SITE.url}/showcase/${project.slug}`} className={LINK_CLASS}>
+            <TerminalLink href={`${SITE.url}/showcase/${project.slug}`} className="justify-self-start" external>
               {project.slug}/
-            </a>
+            </TerminalLink>
             <span className="text-ink-muted">{project.categories.join(" · ")}</span>
           </li>
         ))}
@@ -72,12 +93,9 @@ function ShowcaseOutput() {
 function ContactOutput() {
   return (
     <>
-      <SectionRule title="Contact" />
       <SpecList rows={CONTACT_ROWS} />
       <p className="mt-[1lh]">
-        <a href={`mailto:${SITE.email}`} className={LINK_CLASS}>
-          Write to {SITE.email}
-        </a>
+        <TerminalLink href={`mailto:${SITE.email}`}>Write to {SITE.email}</TerminalLink>
       </p>
     </>
   );
@@ -86,7 +104,6 @@ function ContactOutput() {
 function HelpOutput() {
   return (
     <>
-      <SectionRule title="Help" />
       <dl className="grid grid-cols-[auto_1fr] gap-x-[2ch]">
         {COMMANDS.map((command, index) => (
           <div key={command.id} className="col-span-2 grid grid-cols-subgrid">
@@ -104,20 +121,7 @@ function HelpOutput() {
   );
 }
 
-interface UnknownOutputProps {
-  input: string;
-}
-
-function UnknownOutput({ input }: UnknownOutputProps) {
-  return (
-    <p>
-      <span className="text-ink-muted">[ ERR ]</span> command not found: {input}. Type{" "}
-      <kbd>help</kbd> or pick one from the menu.
-    </p>
-  );
-}
-
-const OUTPUTS: Record<Exclude<CommandId, "clear">, () => React.ReactNode> = {
+const OUTPUTS: Record<CommandId, () => ReactNode> = {
   about: AboutOutput,
   capabilities: CapabilitiesOutput,
   showcase: ShowcaseOutput,
@@ -126,12 +130,10 @@ const OUTPUTS: Record<Exclude<CommandId, "clear">, () => React.ReactNode> = {
 };
 
 interface CommandOutputProps {
-  command: Exclude<CommandId, "clear"> | null;
-  input: string;
+  command: CommandId;
 }
 
-export function CommandOutput({ command, input }: CommandOutputProps) {
-  if (!command) return <UnknownOutput input={input} />;
+export function CommandOutput({ command }: CommandOutputProps) {
   const Output = OUTPUTS[command];
   return <Output />;
 }
