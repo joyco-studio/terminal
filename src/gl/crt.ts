@@ -38,8 +38,8 @@ const SETTINGS = {
   /** >1 shrinks the picture inside the glass so the edges clear the bezel. */
   overscan: 1.05,
   cornerRadius: 0.035,
-  /** UV shift of red/blue per unit from centre: subtle at the corners, none in the middle. */
-  aberration: 0.0016,
+  /** UV shift of red/blue per unit from centre: none in the middle, strongest at the corners. */
+  aberration: 0.004,
   scanlinePeriodPx: 3,
   scanlineDepth: 0.22,
   maskDepth: 0.07,
@@ -48,10 +48,10 @@ const SETTINGS = {
   flicker: 0.012,
   rollSpeed: 0.09,
   rollGain: 0.035,
-  bloomStrength: 0.22,
+  bloomStrength: 0.35,
   bloomRadius: 0.4,
-  /** Above mid-grey: white glows without washing out the blue next to it. */
-  bloomThreshold: 0.45,
+  /** Low on purpose: most of the picture glows, the phosphor halo of an old monitor. */
+  bloomThreshold: 0.12,
 } as const;
 
 const APERTURE_COLUMNS = 3;
