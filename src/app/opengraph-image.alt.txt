@@ -1,0 +1,1 @@
+JOYCO terminal: a keyboard-only retro CRT terminal rendered with lettra on WebGPU.
