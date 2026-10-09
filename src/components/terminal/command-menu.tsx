@@ -87,7 +87,7 @@ export function CommandMenu({ ref, activeIndex, onMove, onOpen, onTypeAhead }: C
   };
 
   return (
-    <nav aria-label="Main menu" className="flex flex-col">
+    <nav aria-label="Main menu" data-focus-entry className="flex flex-col">
       <h2 className="flex items-center gap-[1ch] px-[1ch] text-caption-mono">
         <span aria-hidden="true" className="h-px w-[2ch] bg-ink" />
         <span>Main menu</span>

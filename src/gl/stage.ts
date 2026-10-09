@@ -31,13 +31,20 @@ function blockPointer(event: Event): void {
 
 const POINTER_EVENTS = ["pointerdown", "mousedown", "click", "dblclick", "contextmenu"] as const;
 
+export interface StageOptions {
+  /**
+   * Embedded with a mouse in hand (the Hub): keep the pointer visible and,
+   * instead of swallowing clicks, let one hand keyboard focus to the page.
+   */
+  pointer: "hidden" | { onFocusRequest: () => void };
+}
+
 /** Fixed over everything, owning the pointer (and hiding it). */
 const CANVAS_STYLE = {
   position: "fixed",
   inset: "0",
   zIndex: "10",
   pointerEvents: "auto",
-  cursor: "none",
 } satisfies Partial<CSSStyleDeclaration>;
 
 /**
@@ -47,7 +54,11 @@ const CANVAS_STYLE = {
  * eats the pointer, so the terminal is keyboard-only by construction.
  * Scrolling slides `content` instead of re-measuring the DOM.
  */
-export async function createStage(canvasParent: HTMLElement, screenColor: string): Promise<Stage> {
+export async function createStage(
+  canvasParent: HTMLElement,
+  screenColor: string,
+  { pointer }: StageOptions,
+): Promise<Stage> {
   const renderer = new WebGPURenderer({
     antialias: true,
     alpha: true,
@@ -62,7 +73,17 @@ export async function createStage(canvasParent: HTMLElement, screenColor: string
   canvas.setAttribute("aria-hidden", "true");
   Object.assign(canvas.style, CANVAS_STYLE);
   canvasParent.append(canvas);
-  for (const type of POINTER_EVENTS) canvas.addEventListener(type, blockPointer);
+  const isPointerHidden = pointer === "hidden";
+  canvas.style.cursor = isPointerHidden ? "none" : "default";
+  const requestFocus = () => {
+    if (!isPointerHidden) pointer.onFocusRequest();
+  };
+  if (isPointerHidden) {
+    for (const type of POINTER_EVENTS) canvas.addEventListener(type, blockPointer);
+  } else {
+    // click, not pointerdown: the browser moves focus to <body> on mousedown, after us
+    canvas.addEventListener("click", requestFocus);
+  }
 
   const camera = new OrthographicCamera(0, 1, 0, -1, -CAMERA_DEPTH, CAMERA_DEPTH);
   const scene = new Scene();
@@ -108,6 +129,7 @@ export async function createStage(canvasParent: HTMLElement, screenColor: string
       renderer.setAnimationLoop(null);
       window.removeEventListener("resize", resize);
       for (const type of POINTER_EVENTS) canvas.removeEventListener(type, blockPointer);
+      canvas.removeEventListener("click", requestFocus);
       crt.dispose();
       canvas.remove();
       renderer.dispose();

@@ -6,6 +6,7 @@ import { parseCssColor } from "@/gl/css-color";
 import { FONT_SOURCES } from "@/gl/font-metrics";
 import { INITIAL_BOOT_PROGRESS, type BootProgress, type RenderBackend } from "@/gl/boot-progress";
 import type { GlitchRect } from "@/gl/crt";
+import { isLabEmbed } from "@/gl/embed";
 import { createStage } from "@/gl/stage";
 import {
   REDUCED_MOTION_QUERY,
@@ -16,6 +17,8 @@ import { createTextLayer } from "@/gl/text-layer";
 import { collectTextRuns } from "@/gl/text-runs";
 
 const ASCII_SELECTOR = "[data-gl-ascii]";
+/** Where keyboard focus lands when a click hands it over: the menu's active row. */
+const FOCUS_ENTRY_SELECTOR = "[data-focus-entry] [tabindex='0']";
 /** Element whose `data-gl-window` value changes when a window opens or swaps content. */
 const WINDOW_SELECTOR = "[data-gl-window]";
 const NO_REGION = { left: 0, top: 0, right: 0, bottom: 0 } as const;
@@ -109,7 +112,15 @@ export async function startGpuText(
   const loadFonts = FONT_SOURCES.map(({ weight }) =>
     family.load({ weight }).then(() => report({ fontsLoaded: progress.fontsLoaded + 1 })),
   );
-  const createDevice = createStage(document.body, screenColor).then((created) => {
+  // in the Hub's iframe a click must hand the keyboard over: focus the
+  // frame, then the menu's active row if nothing in the terminal has focus
+  const focusTerminal = () => {
+    window.focus();
+    if (root.contains(document.activeElement)) return;
+    root.querySelector<HTMLElement>(FOCUS_ENTRY_SELECTOR)?.focus();
+  };
+  const pointer = isLabEmbed() ? { onFocusRequest: focusTerminal } : "hidden";
+  const createDevice = createStage(document.body, screenColor, { pointer }).then((created) => {
     report({ backend: created.backend });
     return created;
   });
